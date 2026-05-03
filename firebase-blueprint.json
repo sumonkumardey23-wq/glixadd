@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and earning stats",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "balance": { "type": "number", "description": "Current balance in BDT" },
+        "adsWatchedToday": { "type": "integer", "description": "Number of ads watched in the current 24h cycle" },
+        "totalAdsWatched": { "type": "integer" },
+        "lastAdResetAt": { "type": "string", "format": "date-time", "description": "Timestamp of the last daily limit reset" },
+        "isBanned": { "type": "boolean" },
+        "isAdmin": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLoginDeviceId": { "type": "string", "description": "Device ID of the last login to enforce single device session" }
+      },
+      "required": ["uid", "email", "balance", "adsWatchedToday", "lastAdResetAt"]
+    },
+    "AppConfig": {
+      "title": "App Configuration",
+      "description": "Global settings for the ad network and payouts",
+      "type": "object",
+      "properties": {
+        "monetagAdUnitId": { "type": "string" },
+        "minWithdrawal": { "type": "number", "description": "Minimum balance to request withdrawal" },
+        "rewardPerAd": { "type": "number", "description": "Reward for each ad view" },
+        "dailyAdLimit": { "type": "integer", "description": "Maximum ads per day" },
+        "adTimerSeconds": { "type": "integer" },
+        "telegramLink": { "type": "string" },
+        "facebookLink": { "type": "string" },
+        "announcement": { "type": "string", "description": "Scrolling news ticker text" }
+      },
+      "required": ["monetagAdUnitId", "minWithdrawal", "rewardPerAd", "dailyAdLimit"]
+    },
+    "WithdrawalRequest": {
+      "title": "Withdrawal Request",
+      "description": "Payment request from a user",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["bKash", "Nagad"] },
+        "number": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "amount", "method", "number", "status", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "Support Ticket",
+      "description": "User support conversation with admin and AI",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "replied", "closed"] },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "userEmail", "status", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single message in a support ticket",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "sender": { "type": "string", "enum": ["user", "admin", "ai"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["text", "sender", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/config/settings": {
+      "schema": "AppConfig",
+      "description": "Global app settings"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": "WithdrawalRequest",
+      "description": "Withdrawal requests for admin approval"
+    },
+    "/support/{userId}": {
+      "schema": "SupportTicket",
+      "description": "Summary of a user's support ticket"
+    },
+    "/support/{userId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a support ticket"
+    }
+  }
+}

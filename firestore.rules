@@ -1,0 +1,156 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isEmailVerified() { return request.auth.token.email_verified == true; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    // Admin check: Prioritize primary email for bootstrapping
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'sumonkumardey23@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true)
+      );
+    }
+
+    // --- User Validation ---
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 200 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.balance is number && data.balance >= 0 &&
+             data.adsWatchedToday is int && data.adsWatchedToday >= 0 &&
+             data.totalAdsWatched is int && data.totalAdsWatched >= 0 &&
+             data.isBanned is bool &&
+             data.isAdmin is bool &&
+             (!('lastLoginDeviceId' in data) || (data.lastLoginDeviceId is string && data.lastLoginDeviceId.size() <= 256));
+    }
+
+    match /users {
+      allow list: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) && 
+        isValidUser(incoming()) &&
+        incoming().uid == userId &&
+        incoming().email == request.auth.token.email &&
+        incoming().balance == 0 &&
+        incoming().adsWatchedToday == 0 &&
+        incoming().totalAdsWatched == 0 &&
+        incoming().isAdmin == (request.auth.token.email == 'sumonkumardey23@gmail.com') &&
+        incoming().isBanned == false &&
+        incoming().createdAt == request.time &&
+        incoming().lastAdResetAt == request.time;
+
+      allow update: if (isOwner(userId) && !existing().isBanned && isValidUser(incoming()) && (
+        // Action: Record Ad Watch
+        (incoming().diff(existing()).affectedKeys().hasOnly(['balance', 'adsWatchedToday', 'totalAdsWatched', 'lastLoginDeviceId']) &&
+         incoming().adsWatchedToday == existing().adsWatchedToday + 1 &&
+         incoming().adsWatchedToday <= 400 &&
+         incoming().balance == existing().balance + 0.1 &&
+         incoming().totalAdsWatched == existing().totalAdsWatched + 1) ||
+        
+        // Action: Daily Reset
+        (incoming().diff(existing()).affectedKeys().hasOnly(['adsWatchedToday', 'lastAdResetAt', 'lastLoginDeviceId']) &&
+         incoming().adsWatchedToday == 0) ||
+         
+        // Action: Session Update (Device ID)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['lastLoginDeviceId'])) ||
+
+        // Action: Balance deduction on withdrawal request
+        (incoming().diff(existing()).affectedKeys().hasOnly(['balance', 'lastLoginDeviceId']) &&
+         incoming().balance < existing().balance &&
+         incoming().balance >= 0)
+      )) || isAdmin();
+    }
+
+    // --- Config Validation ---
+    function isValidConfig(data) {
+      return data.monetagAdUnitId is string &&
+             data.minWithdrawal is number &&
+             data.rewardPerAd is number &&
+             data.dailyAdLimit is int &&
+             data.adTimerSeconds is int &&
+             (!('telegramLink' in data) || data.telegramLink is string) &&
+             (!('facebookLink' in data) || data.facebookLink is string) &&
+             (!('announcement' in data) || data.announcement is string);
+    }
+
+    match /config/settings {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidConfig(incoming());
+    }
+
+    // --- Withdrawal Validation ---
+    function isValidWithdrawal(data) {
+      return data.uid is string &&
+             data.amount is number && data.amount >= 200 &&
+             data.method in ['bKash', 'Nagad'] &&
+             data.number is string && data.number.size() >= 11 &&
+             data.status in ['pending', 'approved', 'rejected'];
+    }
+
+    match /withdrawals {
+      allow list: if isSignedIn();
+    }
+
+    match /withdrawals/{withdrawalId} {
+      allow get: if isSignedIn() && (isOwner(existing().uid) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() && 
+        isValidWithdrawal(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        // Securely verify balance
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance >= incoming().amount;
+        
+      allow update: if isAdmin() && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['status']);
+    }
+
+    // --- Support Rules ---
+    function isValidTicket(data) {
+      return data.uid is string && 
+             data.userEmail is string &&
+             data.status in ['open', 'replied', 'closed'];
+    }
+
+    function isValidMessage(data) {
+      return data.text is string && data.text.size() <= 2000 &&
+             data.sender in ['user', 'admin', 'ai'] &&
+             (!('createdAt' in data) || data.createdAt == request.time);
+    }
+
+    match /support {
+      allow list: if isAdmin();
+    }
+
+    match /support/{userId} {
+      allow get, list: if isOwner(userId) || isAdmin();
+      allow create: if (isOwner(userId) || isAdmin()) && isValidTicket(incoming());
+      allow update: if (isOwner(userId) || isAdmin()) && 
+        incoming().status in ['open', 'replied', 'closed'];
+
+      match /messages/{messageId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) && isValidMessage(incoming());
+      }
+    }
+  }
+}
