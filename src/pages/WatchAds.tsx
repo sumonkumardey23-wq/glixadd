@@ -13,6 +13,7 @@ export default function WatchAds() {
   const [isRewarded, setIsRewarded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const adContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     getAppConfig().then(setConfig);
@@ -29,13 +30,17 @@ export default function WatchAds() {
     setIsRewarded(false);
     setError(null);
 
-    // Inject Monetag Script
-    const script = document.createElement('script');
-    script.src = `https://quge5.com/88/tag.min.js`; 
-    script.dataset.zone = config.monetagAdUnitId || '235821';
-    script.async = true;
-    script.setAttribute('data-cfasync', 'false');
-    document.body.appendChild(script);
+    setTimeout(() => {
+      if (adContainerRef.current) {
+        adContainerRef.current.innerHTML = '';
+        const script = document.createElement('script');
+        script.src = 'https://quge5.com/88/tag.min.js';
+        script.dataset.zone = '235821';
+        script.async = true;
+        script.setAttribute('data-cfasync', 'false');
+        adContainerRef.current.appendChild(script);
+      }
+    }, 500);
 
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
@@ -47,13 +52,6 @@ export default function WatchAds() {
         return prev - 1;
       });
     }, 1000);
-
-    // Clean up script after some time
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
   };
 
   const handleAdComplete = async () => {
@@ -180,9 +178,12 @@ export default function WatchAds() {
                 <>
                   <div className="w-24 h-24 border-4 border-white/10 border-t-white rounded-full animate-spin mb-10" />
                   <h2 className="text-2xl font-bold mb-4">Ad Processing...</h2>
-                  <p className="text-white/40 text-sm leading-relaxed mb-8">
+                  <p className="text-white/40 text-sm leading-relaxed mb-6">
                     Do not close this window. Your reward will be added automatically when the timer ends.
                   </p>
+
+                  {/* Monetag Banner Ad */}
+                  <div ref={adContainerRef} className="w-full min-h-[100px] flex items-center justify-center mb-4" />
                   
                   <div className="bg-white/10 p-6 rounded-3xl border border-white/5 space-y-3">
                     <p className="text-xs font-bold text-white/60 uppercase">Trouble seeing the ad?</p>
