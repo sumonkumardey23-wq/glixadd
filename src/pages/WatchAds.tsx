@@ -31,8 +31,8 @@ export default function WatchAds() {
 
     // Inject Monetag Script
     const script = document.createElement('script');
-    script.src = `https://alwingulla.com/88/tag.min.js`; 
-    script.dataset.zone = config.monetagAdUnitId || '2849746';
+    script.src = `https://quge5.com/88/tag.min.js`; 
+    script.dataset.zone = config.monetagAdUnitId || '235821';
     script.async = true;
     script.setAttribute('data-cfasync', 'false');
     document.body.appendChild(script);
